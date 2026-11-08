@@ -2,16 +2,16 @@
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>002 · Upright Gyro Cube</title><style>
 :root{color-scheme:dark;font-family:system-ui,sans-serif}*{box-sizing:border-box}body{margin:0;background:#080f1e;color:#edf6ff}header{padding:15px 16px 8px}a{color:#9edcff}h1{font-size:1.35rem;margin:7px 0}.sub,.hint{color:#aebfd6;font-size:.88rem;line-height:1.5}.stage{position:relative}canvas{display:block;width:100%;height:min(54vh,490px);touch-action:none;background:radial-gradient(ellipse at center,#1a3351,#07101f 72%)}.chip{position:absolute;top:12px;left:14px;font-size:.75rem;color:#b6d9f5;background:#142a43bb;border:1px solid #456783;padding:7px 10px;border-radius:9px}.controls{display:flex;flex-wrap:wrap;gap:8px;padding:13px 15px}button{font:600 .94rem system-ui;background:#1c3553;color:white;border:1px solid #56718d;border-radius:11px;padding:11px 13px}button.active{background:#286a77;border-color:#70c4c7}button:disabled{opacity:.45}.info{margin:0 15px 14px;padding:12px;background:#101e31;border:1px solid #344861;border-radius:12px;line-height:1.8;font-size:.87rem}.info b{color:#c9f5ff}.hint{margin:0 15px 26px}.small{font-size:.78rem;color:#8faac7}input[type=range]{width:145px;vertical-align:middle;accent-color:#66d5f3}label{padding:0 15px;display:block;font-size:.88rem;color:#d7eaff}
-</style></head><body><header><a href="../../index.html">← Mobile Sensor Lab</a><h1>002 · Upright Gyro Cube <span class="small">v0.3</span></h1><div class="sub">Choose a viewing angle, then tilt the phone: the cube compensates to keep its top pointing upward.</div></header>
+</style></head><body><header><a href="../../index.html">← Mobile Sensor Lab</a><h1>002 · Upright Gyro Cube <span class="small">v0.4</span></h1><div class="sub">Choose a viewing angle, then tilt the phone: the cube compensates to keep its top pointing upward.</div></header>
 <div class="stage"><canvas id="scene" aria-label="Interactive transparent cube with water"></canvas><div class="chip" id="mode">VIEW UNLOCKED · DRAG TO ROTATE</div></div>
-<div class="controls"><button id="sensor">Enable sensors</button><button id="lock">Lock view</button><button id="calibrate">Calibrate upright</button><button id="reset">Reset view</button><button id="demo">Manual gravity</button></div>
+<div class="controls"><button id="sensor">Enable sensors</button><button id="lock">Lock view</button><button id="calibrate">Calibrate upright</button><button id="reversePitch" class="active">Reverse pitch: ON</button><button id="reset">Reset view</button><button id="demo">Manual gravity</button></div>
 
 <div class="info"><div>Status: <b id="status">Sensor not enabled</b></div><div>Gravity direction: <b id="grav">0.00, -1.00, 0.00</b></div><div>Alpha / beta / gamma: <b id="angles">—</b></div><div class="small">Manual mode lets you test compensation by dragging the pad.</div><div id="padbox" style="display:none;margin-top:10px"><div id="pad" style="height:95px;border:1px solid #57708d;border-radius:10px;touch-action:none;background:linear-gradient(120deg,#13243b,#204c69);display:grid;place-items:center">Drag to simulate phone tilt</div></div></div>
-<p class="hint">Drag to select the cube view, then tap <b>Lock view</b>. Enable sensors and hold your phone normally; tap <b>Calibrate upright</b>. Tilt the phone to test whether the cube compensates. Water is intentionally disabled for this orientation test. Gravity alignment does not provide absolute compass-heading stabilization.</p>
+<p class="hint">Drag to select the cube view, then tap <b>Lock view</b>. Enable sensors and hold your phone normally; tap <b>Calibrate upright</b>. Tilt the phone to test whether the cube compensates. Water is intentionally disabled for this orientation test. Use Reverse pitch to compare the two forward-tilt directions. Gravity alignment does not provide absolute compass-heading stabilization.</p>
 <script>
 (()=>{'use strict';
 const c=document.querySelector('#scene'),ctx=c.getContext('2d'),$=s=>document.querySelector(s);
-let yaw=-.52,pitch=.38,locked=false,manual=false,drag=false,px=0,py=0,gravity=[0,-1,0],seen=false,events=0,latest=null,calibrated=[0,-1,0];
+let yaw=-.52,pitch=.38,locked=false,manual=false,drag=false,px=0,py=0,gravity=[0,-1,0],seen=false,events=0,latest=null,calibrated=[0,-1,0],reversePitch=true;
 const V=[[-1,-1,-1],[1,-1,-1],[1,1,-1],[-1,1,-1],[-1,-1,1],[1,-1,1],[1,1,1],[-1,1,1]];
 const faces=[[0,1,2,3],[4,5,6,7],[0,4,7,3],[1,5,6,2],[3,2,6,7],[0,1,5,4]];
 const edges=[[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
@@ -44,7 +44,7 @@ function updateSensor(e){if(e.beta==null||e.gamma==null||e.alpha==null)return;se
 // Gravity projected into phone/screen coordinates; alpha (heading) does not change gravity.
 // Beta tilts forward/back; gamma tilts sideways. Y points upward in the cube.
 const b=e.beta*Math.PI/180,g=e.gamma*Math.PI/180;
-let down=[-Math.sin(g)*Math.cos(b),-Math.cos(g)*Math.cos(b),Math.sin(b)];
+let down=[-Math.sin(g)*Math.cos(b),-Math.cos(g)*Math.cos(b),(reversePitch?-1:1)*Math.sin(b)];
 // Screen rotation compensation for portrait/landscape.
 const a=(screen.orientation?.angle||0)*Math.PI/180,ca=Math.cos(a),sa=Math.sin(a);
 setGravity([down[0]*ca-down[1]*sa,down[0]*sa+down[1]*ca,down[2]]);
@@ -54,6 +54,7 @@ $('#lock').onclick=()=>{locked=!locked;$('#lock').textContent=locked?'Unlock vie
 $('#reset').onclick=()=>{yaw=-.52;pitch=.38;calibrated=gravity.slice()};
 $('#demo').onclick=()=>{manual=!manual;$('#demo').classList.toggle('active',manual);$('#demo').textContent=manual?'Use sensors':'Manual gravity';$('#padbox').style.display=manual?'block':'none';$('#status').textContent=manual?'Manual gravity active':seen?'Sensor active':'Sensor not enabled';if(!manual&&latest)updateSensor(latest)};
 $('#calibrate').onclick=()=>{calibrated=gravity.slice();$('#status').textContent='Upright reference calibrated'};
+$('#reversePitch').onclick=()=>{reversePitch=!reversePitch;$('#reversePitch').textContent='Reverse pitch: '+(reversePitch?'ON':'OFF');$('#reversePitch').classList.toggle('active',reversePitch);if(latest)updateSensor(latest);$('#status').textContent='Pitch direction '+(reversePitch?'reversed':'normal')+' — tilt forward to compare'};
 c.addEventListener('pointerdown',e=>{if(locked)return;drag=true;px=e.clientX;py=e.clientY;c.setPointerCapture(e.pointerId)});
 c.addEventListener('pointermove',e=>{if(!drag)return;yaw+=(e.clientX-px)*.009;pitch=Math.max(-1.55,Math.min(1.55,pitch+(e.clientY-py)*.009));px=e.clientX;py=e.clientY});
 c.addEventListener('pointerup',()=>drag=false);c.addEventListener('pointercancel',()=>drag=false);
