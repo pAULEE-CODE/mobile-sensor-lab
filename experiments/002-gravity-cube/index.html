@@ -1,65 +1,48 @@
-<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>002 · Upright Gyro Cube</title><style>
-:root{color-scheme:dark;font-family:system-ui,sans-serif}*{box-sizing:border-box}body{margin:0;background:#080f1e;color:#edf6ff}header{padding:15px 16px 8px}a{color:#9edcff}h1{font-size:1.35rem;margin:7px 0}.sub,.hint{color:#aebfd6;font-size:.88rem;line-height:1.5}.stage{position:relative}canvas{display:block;width:100%;height:min(54vh,490px);touch-action:none;background:radial-gradient(ellipse at center,#1a3351,#07101f 72%)}.chip{position:absolute;top:12px;left:14px;font-size:.75rem;color:#b6d9f5;background:#142a43bb;border:1px solid #456783;padding:7px 10px;border-radius:9px}.controls{display:flex;flex-wrap:wrap;gap:8px;padding:13px 15px}button{font:600 .94rem system-ui;background:#1c3553;color:white;border:1px solid #56718d;border-radius:11px;padding:11px 13px}button.active{background:#286a77;border-color:#70c4c7}button:disabled{opacity:.45}.info{margin:0 15px 14px;padding:12px;background:#101e31;border:1px solid #344861;border-radius:12px;line-height:1.8;font-size:.87rem}.info b{color:#c9f5ff}.hint{margin:0 15px 26px}.small{font-size:.78rem;color:#8faac7}input[type=range]{width:145px;vertical-align:middle;accent-color:#66d5f3}label{padding:0 15px;display:block;font-size:.88rem;color:#d7eaff}
-</style></head><body><header><a href="../../index.html">← Mobile Sensor Lab</a><h1>002 · Upright Gyro Cube <span class="small">v0.4</span></h1><div class="sub">Choose a viewing angle, then tilt the phone: the cube compensates to keep its top pointing upward.</div></header>
-<div class="stage"><canvas id="scene" aria-label="Interactive transparent cube with water"></canvas><div class="chip" id="mode">VIEW UNLOCKED · DRAG TO ROTATE</div></div>
-<div class="controls"><button id="sensor">Enable sensors</button><button id="lock">Lock view</button><button id="calibrate">Calibrate upright</button><button id="reversePitch" class="active">Reverse pitch: ON</button><button id="reset">Reset view</button><button id="demo">Manual gravity</button></div>
-
-<div class="info"><div>Status: <b id="status">Sensor not enabled</b></div><div>Gravity direction: <b id="grav">0.00, -1.00, 0.00</b></div><div>Alpha / beta / gamma: <b id="angles">—</b></div><div class="small">Manual mode lets you test compensation by dragging the pad.</div><div id="padbox" style="display:none;margin-top:10px"><div id="pad" style="height:95px;border:1px solid #57708d;border-radius:10px;touch-action:none;background:linear-gradient(120deg,#13243b,#204c69);display:grid;place-items:center">Drag to simulate phone tilt</div></div></div>
-<p class="hint">Drag to select the cube view, then tap <b>Lock view</b>. Enable sensors and hold your phone normally; tap <b>Calibrate upright</b>. Tilt the phone to test whether the cube compensates. Water is intentionally disabled for this orientation test. Use Reverse pitch to compare the two forward-tilt directions. Gravity alignment does not provide absolute compass-heading stabilization.</p>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>002 v0.5 · World-Space Camera</title><style>
+:root{color-scheme:dark;font-family:system-ui,sans-serif}*{box-sizing:border-box}body{margin:0;background:#07101e;color:#edf7ff}header{padding:16px 16px 10px}h1{font-size:1.35rem;margin:9px 0 5px}a{color:#9adbf5}.sub,.help{font-size:.88rem;color:#afc4da;line-height:1.5}.stage{position:relative}canvas{display:block;width:100%;height:min(55vh,500px);touch-action:none;background:radial-gradient(ellipse at center,#18334e,#06101e 75%)}.chip{position:absolute;top:12px;left:13px;border:1px solid #51708d;background:#142941d9;border-radius:10px;padding:8px 11px;font-size:.76rem;color:#c5e7f7}.controls{display:flex;flex-wrap:wrap;gap:9px;padding:14px}button{border:1px solid #55728f;border-radius:12px;padding:12px 14px;color:#f0f8ff;background:#1b3554;font:600 .93rem system-ui}button.active{background:#176b74;border-color:#62d5d3}.info{margin:0 14px 12px;padding:13px;border:1px solid #344d66;border-radius:12px;background:#102037;font-size:.88rem;line-height:1.9}.info b{color:#c6f4ff}.help{margin:10px 16px 30px}.small{font-size:.8rem;color:#8aa7c5}
+</style></head><body><header><a href="../../index.html">← Mobile Sensor Lab</a><h1>002 · World-Space Camera <span class="small">v0.5</span></h1><div class="sub">Your phone is the camera. The cube remains oriented in the virtual world while you tilt and turn the phone.</div></header>
+<div class="stage"><canvas id="scene" aria-label="Three-dimensional world-locked cube"></canvas><div class="chip" id="chip">DRAG TO CHOOSE VIEW</div></div>
+<div class="controls"><button id="enable">Enable sensors</button><button id="calibrate">Set world reference</button><button id="lock">Lock chosen view</button><button id="reset">Reset view</button><button id="pause">Pause tracking</button></div>
+<div class="info"><div>Tracking: <b id="status">Sensors not enabled</b></div><div>Orientation α / β / γ: <b id="angles">—</b></div><div>Screen angle: <b id="screen">—</b></div><div>Relative rotation: <b id="relative">—</b></div><div class="small">Set world reference while facing the cube. Then tilt the phone forward, backward, left and right. The cube should respond as a stationary object viewed through the phone. Rotation only; moving the phone sideways will not produce positional parallax.</div></div>
+<p class="help">Start with the phone facing you. Tap <b>Enable sensors</b>, then <b>Set world reference</b>. Drag the cube to choose its initial view, and tap <b>Lock chosen view</b> to prevent accidental dragging. The cube remains a fixed distance from the virtual camera so it stays visible during this orientation test. No water yet.</p>
 <script>
 (()=>{'use strict';
-const c=document.querySelector('#scene'),ctx=c.getContext('2d'),$=s=>document.querySelector(s);
-let yaw=-.52,pitch=.38,locked=false,manual=false,drag=false,px=0,py=0,gravity=[0,-1,0],seen=false,events=0,latest=null,calibrated=[0,-1,0],reversePitch=true;
+const $=s=>document.querySelector(s),c=$('#scene'),ctx=c.getContext('2d');
 const V=[[-1,-1,-1],[1,-1,-1],[1,1,-1],[-1,1,-1],[-1,-1,1],[1,-1,1],[1,1,1],[-1,1,1]];
-const faces=[[0,1,2,3],[4,5,6,7],[0,4,7,3],[1,5,6,2],[3,2,6,7],[0,1,5,4]];
-const edges=[[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
-const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2],sub=(a,b)=>a.map((v,i)=>v-b[i]),mix=(a,b,t)=>a.map((v,i)=>v+(b[i]-v)*t);
-const norm=a=>{let l=Math.hypot(...a)||1;return a.map(v=>v/l)};
-const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
-function tiltCompensate(p){
-// Inverse compensation: map the current upward vector back to the calibrated upward vector.
-// This is gravity stabilization (pitch/roll), not absolute yaw tracking.
-const from=norm(gravity.map(v=>-v)),to=norm(calibrated.map(v=>-v));
-const v=cross(from,to),c=Math.max(-1,Math.min(1,dot(from,to))),k=1/(1+c);
-if(c<-.9999)return [-p[0],-p[1],p[2]];
-const t=cross(v,p),u=cross(v,t);
-return p.map((x,i)=>x+t[i]+u[i]*k);
-}
-function rotate(p){let cy=Math.cos(yaw),sy=Math.sin(yaw),cp=Math.cos(pitch),sp=Math.sin(pitch);let x=p[0]*cy+p[2]*sy,z=-p[0]*sy+p[2]*cy;return tiltCompensate([x, p[1]*cp-z*sp,p[1]*sp+z*cp])}
-function project(p,w,h){let v=rotate(p),scale=Math.min(w,h)*.245/(1+v[2]*.115);return [w/2+v[0]*scale,h/2-v[1]*scale,v[2]]}
-function clip(poly,n,d){let out=[];for(let i=0;i<poly.length;i++){let a=poly[i],b=poly[(i+1)%poly.length],da=dot(n,a)-d,db=dot(n,b)-d,ia=da<=0,ib=db<=0;if(ia)out.push(a);if(ia!==ib){let t=da/(da-db);out.push(mix(a,b,t))}}return out}
-function volume(n,d){let N=10,count=0,total=N*N*N;for(let i=0;i<N;i++)for(let j=0;j<N;j++)for(let k=0;k<N;k++){let p=[-1+(i+.5)*2/N,-1+(j+.5)*2/N,-1+(k+.5)*2/N];if(dot(n,p)<=d)count++}return count/total}
-function level(n,amount){let lo=-1.75,hi=1.75;for(let i=0;i<19;i++){let mid=(lo+hi)/2;if(volume(n,mid)<amount)lo=mid;else hi=mid}return (lo+hi)/2}
-function polygon(poly,w,h,color,stroke){if(poly.length<3)return;ctx.beginPath();poly.forEach((p,i)=>{let q=project(p,w,h);i?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1])});ctx.closePath();ctx.fillStyle=color;ctx.fill();if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=1;ctx.stroke()}}
-function render(){let dpr=Math.min(devicePixelRatio||1,2),w=c.clientWidth,h=c.clientHeight;if(c.width!==Math.round(w*dpr)||c.height!==Math.round(h*dpr)){c.width=Math.round(w*dpr);c.height=Math.round(h*dpr)}ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);
-let center=V.map(v=>rotate(v)),order=faces.map((f,i)=>({f,i,z:f.reduce((sum,j)=>sum+center[j][2],0)/4})).sort((a,b)=>b.z-a.z);
-const shades=['rgba(77,193,231,.22)','rgba(85,168,240,.18)','rgba(142,104,227,.17)','rgba(75,204,173,.18)','rgba(91,122,244,.16)','rgba(228,150,120,.15)'];
-for(const {f,i} of order)polygon(f.map(j=>V[j]),w,h,shades[i]);
-for(const [a,b] of edges){let p=project(V[a],w,h),q=project(V[b],w,h);ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.lineTo(q[0],q[1]);ctx.strokeStyle='rgba(194,236,255,.78)';ctx.lineWidth=1.9;ctx.stroke()}
-ctx.textAlign='center';ctx.font='13px system-ui';ctx.fillStyle='#b6d7e9';ctx.fillText(locked?'VIEW LOCKED':'DRAG CUBE TO SET VIEW',w/2,h-18);requestAnimationFrame(render)}
-function setGravity(g){gravity=norm(g);$('#grav').textContent=gravity.map(x=>x.toFixed(2)).join(', ')}
-function updateSensor(e){if(e.beta==null||e.gamma==null||e.alpha==null)return;seen=true;events++;latest=e;$('#angles').textContent=[e.alpha,e.beta,e.gamma].map(v=>v.toFixed(1)+'°').join(' / ');if(manual)return;
-// Gravity projected into phone/screen coordinates; alpha (heading) does not change gravity.
-// Beta tilts forward/back; gamma tilts sideways. Y points upward in the cube.
-const b=e.beta*Math.PI/180,g=e.gamma*Math.PI/180;
-let down=[-Math.sin(g)*Math.cos(b),-Math.cos(g)*Math.cos(b),(reversePitch?-1:1)*Math.sin(b)];
-// Screen rotation compensation for portrait/landscape.
-const a=(screen.orientation?.angle||0)*Math.PI/180,ca=Math.cos(a),sa=Math.sin(a);
-setGravity([down[0]*ca-down[1]*sa,down[0]*sa+down[1]*ca,down[2]]);
-$('#status').textContent='Live sensor ('+events+' events)'}
-$('#sensor').onclick=async()=>{try{if(!window.isSecureContext){$('#status').textContent='Open via HTTPS to enable sensors';return}if(typeof DeviceOrientationEvent==='undefined'){ $('#status').textContent='DeviceOrientation unsupported';return}if(typeof DeviceOrientationEvent.requestPermission==='function'){let result=await DeviceOrientationEvent.requestPermission();if(result!=='granted'){$('#status').textContent='Motion permission denied';return}}window.removeEventListener('deviceorientation',updateSensor);window.addEventListener('deviceorientation',updateSensor);$('#status').textContent='Waiting for sensor events…';setTimeout(()=>{if(!seen)$('#status').textContent='No events received; try browser permissions'},2500)}catch(e){$('#status').textContent='Sensor error: '+e.message}};
-$('#lock').onclick=()=>{locked=!locked;$('#lock').textContent=locked?'Unlock view':'Lock view';$('#lock').classList.toggle('active',locked);$('#mode').textContent=locked?'VIEW LOCKED TO SCREEN':'VIEW UNLOCKED · DRAG TO ROTATE'};
-$('#reset').onclick=()=>{yaw=-.52;pitch=.38;calibrated=gravity.slice()};
-$('#demo').onclick=()=>{manual=!manual;$('#demo').classList.toggle('active',manual);$('#demo').textContent=manual?'Use sensors':'Manual gravity';$('#padbox').style.display=manual?'block':'none';$('#status').textContent=manual?'Manual gravity active':seen?'Sensor active':'Sensor not enabled';if(!manual&&latest)updateSensor(latest)};
-$('#calibrate').onclick=()=>{calibrated=gravity.slice();$('#status').textContent='Upright reference calibrated'};
-$('#reversePitch').onclick=()=>{reversePitch=!reversePitch;$('#reversePitch').textContent='Reverse pitch: '+(reversePitch?'ON':'OFF');$('#reversePitch').classList.toggle('active',reversePitch);if(latest)updateSensor(latest);$('#status').textContent='Pitch direction '+(reversePitch?'reversed':'normal')+' — tilt forward to compare'};
-c.addEventListener('pointerdown',e=>{if(locked)return;drag=true;px=e.clientX;py=e.clientY;c.setPointerCapture(e.pointerId)});
-c.addEventListener('pointermove',e=>{if(!drag)return;yaw+=(e.clientX-px)*.009;pitch=Math.max(-1.55,Math.min(1.55,pitch+(e.clientY-py)*.009));px=e.clientX;py=e.clientY});
+const F=[[0,1,2,3],[4,5,6,7],[0,4,7,3],[1,5,6,2],[3,2,6,7],[0,1,5,4]];
+const E=[[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
+const colors=['rgba(83,179,240,.22)','rgba(71,160,221,.17)','rgba(116,99,231,.18)','rgba(67,201,178,.20)','rgba(90,128,234,.19)','rgba(231,154,113,.18)'];
+const identity=[0,0,0,1],rad=Math.PI/180;
+const qnorm=q=>{let n=Math.hypot(...q)||1;return q.map(x=>x/n)};
+const mul=(a,b)=>qnorm([a[3]*b[0]+a[0]*b[3]+a[1]*b[2]-a[2]*b[1],a[3]*b[1]-a[0]*b[2]+a[1]*b[3]+a[2]*b[0],a[3]*b[2]+a[0]*b[1]-a[1]*b[0]+a[2]*b[3],a[3]*b[3]-a[0]*b[0]-a[1]*b[1]-a[2]*b[2]]);
+const inv=q=>[-q[0],-q[1],-q[2],q[3]];
+const axis=(v,a)=>[v[0]*Math.sin(a/2),v[1]*Math.sin(a/2),v[2]*Math.sin(a/2),Math.cos(a/2)];
+function rot(q,p){const [x,y,z,w]=q,ux=y*p[2]-z*p[1],uy=z*p[0]-x*p[2],uz=x*p[1]-y*p[0];const vx=y*uz-z*uy,vy=z*ux-x*uz,vz=x*uy-y*ux;return [p[0]+2*(w*ux+vx),p[1]+2*(w*uy+vy),p[2]+2*(w*uz+vz)]}
+function orientation(e){const a=e.alpha*rad,b=e.beta*rad,g=e.gamma*rad;
+// W3C intrinsic Z-X'-Y'' device orientation, then screen-coordinate correction.
+const q=mul(mul(axis([0,0,1],a),axis([1,0,0],b)),axis([0,1,0],g));
+const angle=(screen.orientation&&Number.isFinite(screen.orientation.angle)?screen.orientation.angle:window.orientation||0)*rad;
+return mul(q,axis([0,0,1],-angle))}
+let chosen=mul(axis([0,1,0],-.48),axis([1,0,0],.28)),current=null,reference=null,tracking=true,locked=false,drag=false,lastX=0,lastY=0,events=0;
+function viewQ(){return current&&reference&&tracking?mul(mul(inv(current),reference),chosen):chosen}
+function render(){const dpr=Math.min(devicePixelRatio||1,2),w=c.clientWidth,h=c.clientHeight;if(c.width!==Math.round(w*dpr)||c.height!==Math.round(h*dpr)){c.width=Math.round(w*dpr);c.height=Math.round(h*dpr)}ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);
+const q=viewQ(),pts=V.map(v=>rot(q,v)),scale=Math.min(w,h)*.245;
+const proj=p=>{const f=3.9/(3.9+p[2]);return [w/2+p[0]*scale*f,h/2-p[1]*scale*f]};
+const order=F.map((face,i)=>({face,i,z:face.reduce((sum,j)=>sum+pts[j][2],0)/4})).sort((a,b)=>b.z-a.z);
+for(const {face,i} of order){ctx.beginPath();face.forEach((j,k)=>{let p=proj(pts[j]);k?ctx.lineTo(...p):ctx.moveTo(...p)});ctx.closePath();ctx.fillStyle=colors[i];ctx.fill()}
+for(const [a,b] of E){const p=proj(pts[a]),r=proj(pts[b]);ctx.beginPath();ctx.moveTo(...p);ctx.lineTo(...r);ctx.strokeStyle='#c5e9fb';ctx.lineWidth=1.7;ctx.stroke()}
+const up=proj(rot(q,[0,1.3,0]));ctx.beginPath();ctx.arc(...up,4,0,Math.PI*2);ctx.fillStyle='#f8d784';ctx.fill();
+ctx.fillStyle='#b9d4e8';ctx.textAlign='center';ctx.font='13px system-ui';ctx.fillText(locked?'VIEW LOCKED':'DRAG TO CHOOSE STARTING VIEW',w/2,h-19);
+requestAnimationFrame(render)}
+function update(e){if(e.alpha==null||e.beta==null||e.gamma==null)return;current=orientation(e);if(!reference)reference=current.slice();events++;$('#angles').textContent=[e.alpha,e.beta,e.gamma].map(n=>n.toFixed(1)+'°').join(' / ');$('#screen').textContent=((screen.orientation&&screen.orientation.angle)||window.orientation||0)+'°';const d=mul(inv(current),reference);$('#relative').textContent=d.slice(0,3).map(x=>x.toFixed(2)).join(', ');$('#status').textContent=(tracking?'Live sensor':'Tracking paused')+' ('+events+' events)'}
+$('#enable').onclick=async()=>{try{if(!isSecureContext)throw Error('HTTPS required');if(typeof DeviceOrientationEvent==='undefined')throw Error('Orientation API unavailable');if(typeof DeviceOrientationEvent.requestPermission==='function'){const p=await DeviceOrientationEvent.requestPermission();if(p!=='granted')throw Error('Permission not granted')}window.removeEventListener('deviceorientation',update);window.addEventListener('deviceorientation',update);$('#status').textContent='Waiting for orientation events…'}catch(e){$('#status').textContent=e.message}};
+$('#calibrate').onclick=()=>{if(!current){$('#status').textContent='Enable sensors first';return}reference=current.slice();tracking=true;$('#pause').textContent='Pause tracking';$('#status').textContent='World reference set'};
+$('#lock').onclick=()=>{locked=!locked;$('#lock').textContent=locked?'Unlock chosen view':'Lock chosen view';$('#lock').classList.toggle('active',locked);$('#chip').textContent=locked?'WORLD CAMERA · VIEW LOCKED':'DRAG TO CHOOSE VIEW'};
+$('#reset').onclick=()=>{chosen=mul(axis([0,1,0],-.48),axis([1,0,0],.28));if(current)reference=current.slice()};
+$('#pause').onclick=()=>{if(tracking){chosen=viewQ();reference=current?current.slice():reference;tracking=false}else{reference=current?current.slice():reference;tracking=true}$('#pause').textContent=tracking?'Pause tracking':'Resume tracking'};
+c.addEventListener('pointerdown',e=>{if(locked)return;drag=true;lastX=e.clientX;lastY=e.clientY;c.setPointerCapture(e.pointerId)});
+c.addEventListener('pointermove',e=>{if(!drag)return;const dx=(e.clientX-lastX)*.009,dy=(e.clientY-lastY)*.009;const delta=mul(axis([0,1,0],dx),axis([1,0,0],dy));chosen=mul(delta,chosen);lastX=e.clientX;lastY=e.clientY});
 c.addEventListener('pointerup',()=>drag=false);c.addEventListener('pointercancel',()=>drag=false);
-const pad=$('#pad');function padmove(e){let r=pad.getBoundingClientRect(),x=Math.max(-1,Math.min(1,(e.clientX-r.left-r.width/2)/(r.width*.45))),z=Math.max(-1,Math.min(1,(e.clientY-r.top-r.height/2)/(r.height*.45)));setGravity(norm([x,-1,z]))}
-pad.addEventListener('pointerdown',e=>{pad.setPointerCapture(e.pointerId);padmove(e)});pad.addEventListener('pointermove',e=>{if(e.buttons||e.pressure)padmove(e)});
 render();
 })();
 </script></body></html>
