@@ -1,0 +1,48 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>002 v0.5 · World-Space Camera</title><style>
+:root{color-scheme:dark;font-family:system-ui,sans-serif}*{box-sizing:border-box}body{margin:0;background:#07101e;color:#edf7ff}header{padding:16px 16px 10px}h1{font-size:1.35rem;margin:9px 0 5px}a{color:#9adbf5}.sub,.help{font-size:.88rem;color:#afc4da;line-height:1.5}.stage{position:relative}canvas{display:block;width:100%;height:min(55vh,500px);touch-action:none;background:radial-gradient(ellipse at center,#18334e,#06101e 75%)}.chip{position:absolute;top:12px;left:13px;border:1px solid #51708d;background:#142941d9;border-radius:10px;padding:8px 11px;font-size:.76rem;color:#c5e7f7}.controls{display:flex;flex-wrap:wrap;gap:9px;padding:14px}button{border:1px solid #55728f;border-radius:12px;padding:12px 14px;color:#f0f8ff;background:#1b3554;font:600 .93rem system-ui}button.active{background:#176b74;border-color:#62d5d3}.info{margin:0 14px 12px;padding:13px;border:1px solid #344d66;border-radius:12px;background:#102037;font-size:.88rem;line-height:1.9}.info b{color:#c6f4ff}.help{margin:10px 16px 30px}.small{font-size:.8rem;color:#8aa7c5}
+</style></head><body><header><a href="../../index.html">← Mobile Sensor Lab</a><h1>002 · World-Space Camera <span class="small">v0.5</span></h1><div class="sub">Your phone is the camera. The cube remains oriented in the virtual world while you tilt and turn the phone.</div></header>
+<div class="stage"><canvas id="scene" aria-label="Three-dimensional world-locked cube"></canvas><div class="chip" id="chip">DRAG TO CHOOSE VIEW</div></div>
+<div class="controls"><button id="enable">Enable sensors</button><button id="calibrate">Set world reference</button><button id="lock">Lock chosen view</button><button id="reset">Reset view</button><button id="pause">Pause tracking</button></div>
+<div class="info"><div>Tracking: <b id="status">Sensors not enabled</b></div><div>Orientation α / β / γ: <b id="angles">—</b></div><div>Screen angle: <b id="screen">—</b></div><div>Relative rotation: <b id="relative">—</b></div><div class="small">Set world reference while facing the cube. Then tilt the phone forward, backward, left and right. The cube should respond as a stationary object viewed through the phone. Rotation only; moving the phone sideways will not produce positional parallax.</div></div>
+<p class="help">Start with the phone facing you. Tap <b>Enable sensors</b>, then <b>Set world reference</b>. Drag the cube to choose its initial view, and tap <b>Lock chosen view</b> to prevent accidental dragging. The cube remains a fixed distance from the virtual camera so it stays visible during this orientation test. No water yet.</p>
+<script>
+(()=>{'use strict';
+const $=s=>document.querySelector(s),c=$('#scene'),ctx=c.getContext('2d');
+const V=[[-1,-1,-1],[1,-1,-1],[1,1,-1],[-1,1,-1],[-1,-1,1],[1,-1,1],[1,1,1],[-1,1,1]];
+const F=[[0,1,2,3],[4,5,6,7],[0,4,7,3],[1,5,6,2],[3,2,6,7],[0,1,5,4]];
+const E=[[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
+const colors=['rgba(83,179,240,.22)','rgba(71,160,221,.17)','rgba(116,99,231,.18)','rgba(67,201,178,.20)','rgba(90,128,234,.19)','rgba(231,154,113,.18)'];
+const identity=[0,0,0,1],rad=Math.PI/180;
+const qnorm=q=>{let n=Math.hypot(...q)||1;return q.map(x=>x/n)};
+const mul=(a,b)=>qnorm([a[3]*b[0]+a[0]*b[3]+a[1]*b[2]-a[2]*b[1],a[3]*b[1]-a[0]*b[2]+a[1]*b[3]+a[2]*b[0],a[3]*b[2]+a[0]*b[1]-a[1]*b[0]+a[2]*b[3],a[3]*b[3]-a[0]*b[0]-a[1]*b[1]-a[2]*b[2]]);
+const inv=q=>[-q[0],-q[1],-q[2],q[3]];
+const axis=(v,a)=>[v[0]*Math.sin(a/2),v[1]*Math.sin(a/2),v[2]*Math.sin(a/2),Math.cos(a/2)];
+function rot(q,p){const [x,y,z,w]=q,ux=y*p[2]-z*p[1],uy=z*p[0]-x*p[2],uz=x*p[1]-y*p[0];const vx=y*uz-z*uy,vy=z*ux-x*uz,vz=x*uy-y*ux;return [p[0]+2*(w*ux+vx),p[1]+2*(w*uy+vy),p[2]+2*(w*uz+vz)]}
+function orientation(e){const a=e.alpha*rad,b=e.beta*rad,g=e.gamma*rad;
+// W3C intrinsic Z-X'-Y'' device orientation, then screen-coordinate correction.
+const q=mul(mul(axis([0,0,1],a),axis([1,0,0],b)),axis([0,1,0],g));
+const angle=(screen.orientation&&Number.isFinite(screen.orientation.angle)?screen.orientation.angle:window.orientation||0)*rad;
+return mul(q,axis([0,0,1],-angle))}
+let chosen=mul(axis([0,1,0],-.48),axis([1,0,0],.28)),current=null,reference=null,tracking=true,locked=false,drag=false,lastX=0,lastY=0,events=0;
+function viewQ(){return current&&reference&&tracking?mul(mul(inv(current),reference),chosen):chosen}
+function render(){const dpr=Math.min(devicePixelRatio||1,2),w=c.clientWidth,h=c.clientHeight;if(c.width!==Math.round(w*dpr)||c.height!==Math.round(h*dpr)){c.width=Math.round(w*dpr);c.height=Math.round(h*dpr)}ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);
+const q=viewQ(),pts=V.map(v=>rot(q,v)),scale=Math.min(w,h)*.245;
+const proj=p=>{const f=3.9/(3.9+p[2]);return [w/2+p[0]*scale*f,h/2-p[1]*scale*f]};
+const order=F.map((face,i)=>({face,i,z:face.reduce((sum,j)=>sum+pts[j][2],0)/4})).sort((a,b)=>b.z-a.z);
+for(const {face,i} of order){ctx.beginPath();face.forEach((j,k)=>{let p=proj(pts[j]);k?ctx.lineTo(...p):ctx.moveTo(...p)});ctx.closePath();ctx.fillStyle=colors[i];ctx.fill()}
+for(const [a,b] of E){const p=proj(pts[a]),r=proj(pts[b]);ctx.beginPath();ctx.moveTo(...p);ctx.lineTo(...r);ctx.strokeStyle='#c5e9fb';ctx.lineWidth=1.7;ctx.stroke()}
+const up=proj(rot(q,[0,1.3,0]));ctx.beginPath();ctx.arc(...up,4,0,Math.PI*2);ctx.fillStyle='#f8d784';ctx.fill();
+ctx.fillStyle='#b9d4e8';ctx.textAlign='center';ctx.font='13px system-ui';ctx.fillText(locked?'VIEW LOCKED':'DRAG TO CHOOSE STARTING VIEW',w/2,h-19);
+requestAnimationFrame(render)}
+function update(e){if(e.alpha==null||e.beta==null||e.gamma==null)return;current=orientation(e);if(!reference)reference=current.slice();events++;$('#angles').textContent=[e.alpha,e.beta,e.gamma].map(n=>n.toFixed(1)+'°').join(' / ');$('#screen').textContent=((screen.orientation&&screen.orientation.angle)||window.orientation||0)+'°';const d=mul(inv(current),reference);$('#relative').textContent=d.slice(0,3).map(x=>x.toFixed(2)).join(', ');$('#status').textContent=(tracking?'Live sensor':'Tracking paused')+' ('+events+' events)'}
+$('#enable').onclick=async()=>{try{if(!isSecureContext)throw Error('HTTPS required');if(typeof DeviceOrientationEvent==='undefined')throw Error('Orientation API unavailable');if(typeof DeviceOrientationEvent.requestPermission==='function'){const p=await DeviceOrientationEvent.requestPermission();if(p!=='granted')throw Error('Permission not granted')}window.removeEventListener('deviceorientation',update);window.addEventListener('deviceorientation',update);$('#status').textContent='Waiting for orientation events…'}catch(e){$('#status').textContent=e.message}};
+$('#calibrate').onclick=()=>{if(!current){$('#status').textContent='Enable sensors first';return}reference=current.slice();tracking=true;$('#pause').textContent='Pause tracking';$('#status').textContent='World reference set'};
+$('#lock').onclick=()=>{locked=!locked;$('#lock').textContent=locked?'Unlock chosen view':'Lock chosen view';$('#lock').classList.toggle('active',locked);$('#chip').textContent=locked?'WORLD CAMERA · VIEW LOCKED':'DRAG TO CHOOSE VIEW'};
+$('#reset').onclick=()=>{chosen=mul(axis([0,1,0],-.48),axis([1,0,0],.28));if(current)reference=current.slice()};
+$('#pause').onclick=()=>{if(tracking){chosen=viewQ();reference=current?current.slice():reference;tracking=false}else{reference=current?current.slice():reference;tracking=true}$('#pause').textContent=tracking?'Pause tracking':'Resume tracking'};
+c.addEventListener('pointerdown',e=>{if(locked)return;drag=true;lastX=e.clientX;lastY=e.clientY;c.setPointerCapture(e.pointerId)});
+c.addEventListener('pointermove',e=>{if(!drag)return;const dx=(e.clientX-lastX)*.009,dy=(e.clientY-lastY)*.009;const delta=mul(axis([0,1,0],dx),axis([1,0,0],dy));chosen=mul(delta,chosen);lastX=e.clientX;lastY=e.clientY});
+c.addEventListener('pointerup',()=>drag=false);c.addEventListener('pointercancel',()=>drag=false);
+render();
+})();
+</script></body></html>
