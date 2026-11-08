@@ -1,35 +1,42 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>002 · Gravity Cube</title><style>
+<title>002 · Upright Gyro Cube</title><style>
 :root{color-scheme:dark;font-family:system-ui,sans-serif}*{box-sizing:border-box}body{margin:0;background:#080f1e;color:#edf6ff}header{padding:15px 16px 8px}a{color:#9edcff}h1{font-size:1.35rem;margin:7px 0}.sub,.hint{color:#aebfd6;font-size:.88rem;line-height:1.5}.stage{position:relative}canvas{display:block;width:100%;height:min(54vh,490px);touch-action:none;background:radial-gradient(ellipse at center,#1a3351,#07101f 72%)}.chip{position:absolute;top:12px;left:14px;font-size:.75rem;color:#b6d9f5;background:#142a43bb;border:1px solid #456783;padding:7px 10px;border-radius:9px}.controls{display:flex;flex-wrap:wrap;gap:8px;padding:13px 15px}button{font:600 .94rem system-ui;background:#1c3553;color:white;border:1px solid #56718d;border-radius:11px;padding:11px 13px}button.active{background:#286a77;border-color:#70c4c7}button:disabled{opacity:.45}.info{margin:0 15px 14px;padding:12px;background:#101e31;border:1px solid #344861;border-radius:12px;line-height:1.8;font-size:.87rem}.info b{color:#c9f5ff}.hint{margin:0 15px 26px}.small{font-size:.78rem;color:#8faac7}input[type=range]{width:145px;vertical-align:middle;accent-color:#66d5f3}label{padding:0 15px;display:block;font-size:.88rem;color:#d7eaff}
-</style></head><body><header><a href="../../index.html">← Mobile Sensor Lab</a><h1>002 · Gravity Cube <span class="small">v0.1</span></h1><div class="sub">Choose a viewing angle, lock the cube to your screen, and tilt the phone to move the water.</div></header>
+</style></head><body><header><a href="../../index.html">← Mobile Sensor Lab</a><h1>002 · Upright Gyro Cube <span class="small">v0.2</span></h1><div class="sub">Choose a viewing angle, then tilt the phone: the cube compensates to keep its top pointing upward.</div></header>
 <div class="stage"><canvas id="scene" aria-label="Interactive transparent cube with water"></canvas><div class="chip" id="mode">VIEW UNLOCKED · DRAG TO ROTATE</div></div>
-<div class="controls"><button id="sensor">Enable sensors</button><button id="lock">Lock view</button><button id="reset">Reset view</button><button id="demo">Manual gravity</button></div>
-<label>Water fill <input type="range" id="fill" min="10" max="90" value="55"> <b id="filltext">55%</b></label>
-<div class="info"><div>Status: <b id="status">Sensor not enabled</b></div><div>Gravity in cube: <b id="grav">0.00, -1.00, 0.00</b></div><div>Alpha / beta / gamma: <b id="angles">—</b></div><div class="small">In manual gravity mode, drag the water-direction pad below.</div><div id="padbox" style="display:none;margin-top:10px"><div id="pad" style="height:95px;border:1px solid #57708d;border-radius:10px;touch-action:none;background:linear-gradient(120deg,#13243b,#204c69);display:grid;place-items:center">Drag to tilt gravity</div></div></div>
-<p class="hint">Drag the cube to set a view; tap <b>Lock view</b> to keep that view fixed on screen. The blue water responds to gravity while the cube remains screen-locked. This is an early geometric water-volume approximation, not a full fluid simulation. For sensor access, use HTTPS and grant motion permission if requested.</p>
+<div class="controls"><button id="sensor">Enable sensors</button><button id="lock">Lock view</button><button id="calibrate">Calibrate upright</button><button id="reset">Reset view</button><button id="demo">Manual gravity</button></div>
+
+<div class="info"><div>Status: <b id="status">Sensor not enabled</b></div><div>Gravity direction: <b id="grav">0.00, -1.00, 0.00</b></div><div>Alpha / beta / gamma: <b id="angles">—</b></div><div class="small">Manual mode lets you test compensation by dragging the pad.</div><div id="padbox" style="display:none;margin-top:10px"><div id="pad" style="height:95px;border:1px solid #57708d;border-radius:10px;touch-action:none;background:linear-gradient(120deg,#13243b,#204c69);display:grid;place-items:center">Drag to simulate phone tilt</div></div></div>
+<p class="hint">Drag to select the cube view, then tap <b>Lock view</b>. Enable sensors and hold your phone normally; tap <b>Calibrate upright</b>. Tilt the phone to test whether the cube compensates. Water is intentionally disabled for this orientation test. Gravity alignment does not provide absolute compass-heading stabilization.</p>
 <script>
 (()=>{'use strict';
 const c=document.querySelector('#scene'),ctx=c.getContext('2d'),$=s=>document.querySelector(s);
-let yaw=-.52,pitch=.38,locked=false,manual=false,drag=false,px=0,py=0,gravity=[0,-1,0],fill=.55,seen=false,events=0,latest=null;
+let yaw=-.52,pitch=.38,locked=false,manual=false,drag=false,px=0,py=0,gravity=[0,-1,0],seen=false,events=0,latest=null,calibrated=[0,-1,0];
 const V=[[-1,-1,-1],[1,-1,-1],[1,1,-1],[-1,1,-1],[-1,-1,1],[1,-1,1],[1,1,1],[-1,1,1]];
 const faces=[[0,1,2,3],[4,5,6,7],[0,4,7,3],[1,5,6,2],[3,2,6,7],[0,1,5,4]];
 const edges=[[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
 const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2],sub=(a,b)=>a.map((v,i)=>v-b[i]),mix=(a,b,t)=>a.map((v,i)=>v+(b[i]-v)*t);
 const norm=a=>{let l=Math.hypot(...a)||1;return a.map(v=>v/l)};
 const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
-function rotate(p){let cy=Math.cos(yaw),sy=Math.sin(yaw),cp=Math.cos(pitch),sp=Math.sin(pitch);let x=p[0]*cy+p[2]*sy,z=-p[0]*sy+p[2]*cy;return [x, p[1]*cp-z*sp,p[1]*sp+z*cp]}
+function tiltCompensate(p){
+// Align the reference upward vector with the measured upward vector.
+// This is gravity stabilization (pitch/roll), not absolute yaw tracking.
+const from=norm(calibrated.map(v=>-v)),to=norm(gravity.map(v=>-v));
+const v=cross(from,to),c=Math.max(-1,Math.min(1,dot(from,to))),k=1/(1+c);
+if(c<-.9999)return [-p[0],-p[1],p[2]];
+const t=cross(v,p),u=cross(v,t);
+return p.map((x,i)=>x+t[i]+u[i]*k);
+}
+function rotate(p){let cy=Math.cos(yaw),sy=Math.sin(yaw),cp=Math.cos(pitch),sp=Math.sin(pitch);let x=p[0]*cy+p[2]*sy,z=-p[0]*sy+p[2]*cy;return tiltCompensate([x, p[1]*cp-z*sp,p[1]*sp+z*cp])}
 function project(p,w,h){let v=rotate(p),scale=Math.min(w,h)*.245/(1+v[2]*.115);return [w/2+v[0]*scale,h/2-v[1]*scale,v[2]]}
 function clip(poly,n,d){let out=[];for(let i=0;i<poly.length;i++){let a=poly[i],b=poly[(i+1)%poly.length],da=dot(n,a)-d,db=dot(n,b)-d,ia=da<=0,ib=db<=0;if(ia)out.push(a);if(ia!==ib){let t=da/(da-db);out.push(mix(a,b,t))}}return out}
 function volume(n,d){let N=10,count=0,total=N*N*N;for(let i=0;i<N;i++)for(let j=0;j<N;j++)for(let k=0;k<N;k++){let p=[-1+(i+.5)*2/N,-1+(j+.5)*2/N,-1+(k+.5)*2/N];if(dot(n,p)<=d)count++}return count/total}
 function level(n,amount){let lo=-1.75,hi=1.75;for(let i=0;i<19;i++){let mid=(lo+hi)/2;if(volume(n,mid)<amount)lo=mid;else hi=mid}return (lo+hi)/2}
 function polygon(poly,w,h,color,stroke){if(poly.length<3)return;ctx.beginPath();poly.forEach((p,i)=>{let q=project(p,w,h);i?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1])});ctx.closePath();ctx.fillStyle=color;ctx.fill();if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=1;ctx.stroke()}}
 function render(){let dpr=Math.min(devicePixelRatio||1,2),w=c.clientWidth,h=c.clientHeight;if(c.width!==Math.round(w*dpr)||c.height!==Math.round(h*dpr)){c.width=Math.round(w*dpr);c.height=Math.round(h*dpr)}ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);
-let n=gravity.map(v=>-v),d=level(n,fill),center=V.map(v=>rotate(v)),order=faces.map((f,i)=>({f,i,z:f.reduce((s,j)=>s+center[j][2],0)/4})).sort((a,b)=>b.z-a.z);
-for(const {f,i} of order){polygon(f.map(j=>V[j]),w,h,'rgba(115,180,224,.055)');let wet=clip(f.map(j=>V[j]),n,d);polygon(wet,w,h,'rgba(24,149,236,.29)','rgba(70,204,255,.22)')}
-let intersections=[];for(let [i,j] of edges){let a=V[i],b=V[j],da=dot(n,a)-d,db=dot(n,b)-d;if(da*db<0)intersections.push(mix(a,b,da/(da-db)))}
-let unique=[];for(let p of intersections)if(!unique.some(q=>Math.hypot(...sub(p,q))<.0001))unique.push(p);
-if(unique.length>=3){let centroid=unique.reduce((a,p)=>a.map((v,i)=>v+p[i]),[0,0,0]).map(v=>v/unique.length),u=norm(cross(n,[0,0,1]));if(Math.hypot(...u)<.1)u=norm(cross(n,[1,0,0]));let v=cross(n,u);unique.sort((a,b)=>Math.atan2(dot(sub(a,centroid),v),dot(sub(a,centroid),u))-Math.atan2(dot(sub(b,centroid),v),dot(sub(b,centroid),u)));polygon(unique,w,h,'rgba(68,208,255,.58)','rgba(170,248,255,.88)')}
+let center=V.map(v=>rotate(v)),order=faces.map((f,i)=>({f,i,z:f.reduce((sum,j)=>sum+center[j][2],0)/4})).sort((a,b)=>b.z-a.z);
+const shades=['rgba(77,193,231,.22)','rgba(85,168,240,.18)','rgba(142,104,227,.17)','rgba(75,204,173,.18)','rgba(91,122,244,.16)','rgba(228,150,120,.15)'];
+for(const {f,i} of order)polygon(f.map(j=>V[j]),w,h,shades[i]);
 for(const [a,b] of edges){let p=project(V[a],w,h),q=project(V[b],w,h);ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.lineTo(q[0],q[1]);ctx.strokeStyle='rgba(194,236,255,.78)';ctx.lineWidth=1.9;ctx.stroke()}
 ctx.textAlign='center';ctx.font='13px system-ui';ctx.fillStyle='#b6d7e9';ctx.fillText(locked?'VIEW LOCKED':'DRAG CUBE TO SET VIEW',w/2,h-18);requestAnimationFrame(render)}
 function setGravity(g){gravity=norm(g);$('#grav').textContent=gravity.map(x=>x.toFixed(2)).join(', ')}
@@ -44,9 +51,9 @@ setGravity([down[0]*ca-down[1]*sa,down[0]*sa+down[1]*ca,down[2]]);
 $('#status').textContent='Live sensor ('+events+' events)'}
 $('#sensor').onclick=async()=>{try{if(!window.isSecureContext){$('#status').textContent='Open via HTTPS to enable sensors';return}if(typeof DeviceOrientationEvent==='undefined'){ $('#status').textContent='DeviceOrientation unsupported';return}if(typeof DeviceOrientationEvent.requestPermission==='function'){let result=await DeviceOrientationEvent.requestPermission();if(result!=='granted'){$('#status').textContent='Motion permission denied';return}}window.removeEventListener('deviceorientation',updateSensor);window.addEventListener('deviceorientation',updateSensor);$('#status').textContent='Waiting for sensor events…';setTimeout(()=>{if(!seen)$('#status').textContent='No events received; try browser permissions'},2500)}catch(e){$('#status').textContent='Sensor error: '+e.message}};
 $('#lock').onclick=()=>{locked=!locked;$('#lock').textContent=locked?'Unlock view':'Lock view';$('#lock').classList.toggle('active',locked);$('#mode').textContent=locked?'VIEW LOCKED TO SCREEN':'VIEW UNLOCKED · DRAG TO ROTATE'};
-$('#reset').onclick=()=>{yaw=-.52;pitch=.38};
+$('#reset').onclick=()=>{yaw=-.52;pitch=.38;calibrated=gravity.slice()};
 $('#demo').onclick=()=>{manual=!manual;$('#demo').classList.toggle('active',manual);$('#demo').textContent=manual?'Use sensors':'Manual gravity';$('#padbox').style.display=manual?'block':'none';$('#status').textContent=manual?'Manual gravity active':seen?'Sensor active':'Sensor not enabled';if(!manual&&latest)updateSensor(latest)};
-$('#fill').oninput=e=>{fill=+e.target.value/100;$('#filltext').textContent=e.target.value+'%'};
+$('#calibrate').onclick=()=>{calibrated=gravity.slice();$('#status').textContent='Upright reference calibrated'};
 c.addEventListener('pointerdown',e=>{if(locked)return;drag=true;px=e.clientX;py=e.clientY;c.setPointerCapture(e.pointerId)});
 c.addEventListener('pointermove',e=>{if(!drag)return;yaw+=(e.clientX-px)*.009;pitch=Math.max(-1.55,Math.min(1.55,pitch+(e.clientY-py)*.009));px=e.clientX;py=e.clientY});
 c.addEventListener('pointerup',()=>drag=false);c.addEventListener('pointercancel',()=>drag=false);
