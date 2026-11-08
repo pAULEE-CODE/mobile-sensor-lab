@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>001 · Fixed-Space Cube</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,sans-serif}*{box-sizing:border-box}body{margin:0;background:#090e1b;color:#eaf0ff}header{padding:18px 18px 8px}a{color:#92d8ff}h1{font-size:1.3rem;margin:8px 0}.sub{color:#a4b1ca;font-size:.88rem}canvas{display:block;width:100%;height:min(57vh,510px);touch-action:none;background:radial-gradient(circle at 50% 45%,#1b3150,#080e1b 70%)}.controls{display:flex;flex-wrap:wrap;gap:9px;padding:14px 18px}button{border:1px solid #536781;background:#1c3554;color:white;border-radius:12px;padding:12px 15px;font-weight:700;font-size:1rem}button:active{background:#38618d}.stats{margin:0 18px 20px;padding:13px;border:1px solid #34425b;border-radius:12px;background:#101b2d;line-height:1.8;font-variant-numeric:tabular-nums}.stats span{color:#a9bed6}.note{margin:0 18px 24px;color:#aab7cb;font-size:.87rem;line-height:1.5}
+</style></head><body>
+<header><a href="../../index.html">← Mobile Sensor Lab</a><h1>001 · Fixed-Space Cube</h1><div class="sub">Rotate the phone; the virtual cube compensates for your rotation.</div></header>
+<canvas id="view" aria-label="3D cube orientation display"></canvas>
+<div class="controls"><button id="enable">Enable motion</button><button id="zero">Calibrate / Reset</button><button id="demo">Manual demo: off</button></div>
+<div class="stats"><div>Status: <strong id="status">Waiting for sensor permission</strong></div><div><span>Yaw α:</span> <b id="alpha">—</b>° &nbsp; <span>Pitch β:</span> <b id="beta">—</b>° &nbsp; <span>Roll γ:</span> <b id="gamma">—</b>°</div><div><span>Events:</span> <b id="events">0</b> &nbsp; <span>Reference:</span> <b id="ref">Not calibrated</b></div></div>
+<p class="note">Hold your phone in its starting orientation and tap Calibrate. The cube is orientation-stabilized, not position-tracked. HTTPS and motion permission may be required. In manual demo mode drag on the cube to simulate rotation.</p>
+<script>
+(()=>{'use strict';
+const canvas=document.querySelector('#view'),ctx=canvas.getContext('2d'),status=document.querySelector('#status');
+let current=[0,0,0,1],reference=null,received=0,manual=false,drag=false,dx=0,dy=0,hasSensor=false;
+const qmul=(a,b)=>[a[3]*b[0]+a[0]*b[3]+a[1]*b[2]-a[2]*b[1],a[3]*b[1]-a[0]*b[2]+a[1]*b[3]+a[2]*b[0],a[3]*b[2]+a[0]*b[1]-a[1]*b[0]+a[2]*b[3],a[3]*b[3]-a[0]*b[0]-a[1]*b[1]-a[2]*b[2]];
+const inv=q=>[-q[0],-q[1],-q[2],q[3]];
+const axis=(x,y,z,a)=>[x*Math.sin(a/2),y*Math.sin(a/2),z*Math.sin(a/2),Math.cos(a/2)];
+const rot=(v,q)=>{const p=qmul(qmul(q,[...v,0]),inv(q));return p.slice(0,3)};
+function orientation(a,b,g){const d=Math.PI/180;let q=qmul(qmul(axis(0,1,0,a*d),axis(1,0,0,b*d)),axis(0,0,1,-g*d));const angle=(screen.orientation?.angle||0)*d;return qmul(q,axis(0,0,1,-angle))}
+function sensor(e){if(manual||e.alpha==null||e.beta==null||e.gamma==null)return;current=orientation(e.alpha,e.beta,e.gamma);hasSensor=true;received++;document.querySelector('#events').textContent=received;for(const [id,n] of [['alpha',e.alpha],['beta',e.beta],['gamma',e.gamma]])document.getElementById(id).textContent=n.toFixed(1);if(!reference){reference=current.slice();document.querySelector('#ref').textContent='Automatic';}status.textContent='Motion sensor active'}
+document.querySelector('#enable').onclick=async()=>{try{if(!window.isSecureContext){status.textContent='HTTPS required for reliable sensor access';return}if(typeof DeviceOrientationEvent==='undefined'){status.textContent='DeviceOrientation not supported';return}if(typeof DeviceOrientationEvent.requestPermission==='function'){const permission=await DeviceOrientationEvent.requestPermission();if(permission!=='granted'){status.textContent='Permission not granted';return}}window.removeEventListener('deviceorientation',sensor);window.addEventListener('deviceorientation',sensor);status.textContent='Listening for sensor events…';setTimeout(()=>{if(!hasSensor&&!manual)status.textContent='No orientation events received; check browser settings'},2200)}catch(err){status.textContent='Sensor error: '+err.message}};
+document.querySelector('#zero').onclick=()=>{reference=manual?[0,0,0,1]:hasSensor?current.slice():null;dx=dy=0;document.querySelector('#ref').textContent=reference?'Calibrated':'Waiting for sensors'};
+document.querySelector('#demo').onclick=()=>{manual=!manual;reference=[0,0,0,1];dx=dy=0;document.querySelector('#demo').textContent='Manual demo: '+(manual?'on':'off');status.textContent=manual?'Drag to rotate simulated phone':'Enable motion to use sensors';document.querySelector('#ref').textContent='Calibrated'};
+canvas.addEventListener('pointerdown',e=>{if(!manual)return;drag=true;canvas.setPointerCapture(e.pointerId);canvas._x=e.clientX;canvas._y=e.clientY});canvas.addEventListener('pointermove',e=>{if(!drag)return;dx+=(e.clientX-canvas._x)*.008;dy+=(e.clientY-canvas._y)*.008;canvas._x=e.clientX;canvas._y=e.clientY});canvas.addEventListener('pointerup',()=>drag=false);
+const verts=[[-1,-1,-1],[1,-1,-1],[1,1,-1],[-1,1,-1],[-1,-1,1],[1,-1,1],[1,1,1],[-1,1,1]],faces=[[0,1,2,3],[4,5,6,7],[0,4,7,3],[1,5,6,2],[3,2,6,7],[0,1,5,4]],colors=['#40c3dd','#f2a94d','#bc78e6','#56d9a1','#668ef6','#e37e9a'];
+function frame(){const dpr=Math.min(devicePixelRatio||1,2),w=canvas.clientWidth,h=canvas.clientHeight;if(canvas.width!==Math.round(w*dpr)||canvas.height!==Math.round(h*dpr)){canvas.width=w*dpr;canvas.height=h*dpr}ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);
+let q=manual?qmul(axis(0,1,0,dx),axis(1,0,0,dy)):reference?qmul(inv(reference),current):[0,0,0,1];q=inv(q);
+const pts=verts.map(v=>rot(v,q));const project=v=>{let s=Math.min(w,h)*.26/(1+v[2]*.12);return [w/2+v[0]*s,h/2-v[1]*s]};
+faces.map((face,i)=>({face,i,z:face.reduce((s,j)=>s+pts[j][2],0)/4})).sort((a,b)=>b.z-a.z).forEach(({face,i})=>{ctx.beginPath();face.forEach((j,k)=>{let p=project(pts[j]);k?ctx.lineTo(...p):ctx.moveTo(...p)});ctx.closePath();ctx.fillStyle=colors[i]+'bb';ctx.fill();ctx.strokeStyle='#d8edff';ctx.lineWidth=2;ctx.stroke()});
+ctx.fillStyle='#b4c8e4';ctx.textAlign='center';ctx.font='13px system-ui';ctx.fillText(manual?'Manual simulation':hasSensor?'Sensor orientation':'Awaiting motion data',w/2,h-18);requestAnimationFrame(frame)}requestAnimationFrame(frame);
+})();
+</script></body></html>
